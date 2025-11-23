@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Выбор случайных пользователей Twitch</title>
+    <style>
+      :root {
+        --bg: #0b0e12;
+        --card: #0f1418;
+        --muted: #8b98a4;
+        --accent: #9146ff;
+        --glass: rgba(255, 255, 255, 0.03);
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        padding: 20px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        min-height: 100vh;
+        background: linear-gradient(180deg, #040608 0%, #0b0f14 100%);
+        color: #e6eef6;
+        font-family: Inter, Segoe UI, Roboto, Arial;
+      }
+
+      .wrap {
+        width: 1100px;
+        max-width: 98vw;
+        background: var(--card);
+        border-radius: 12px;
+        padding: 18px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+        display: flex;
+        gap: 16px;
+      }
+
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .left {
+        flex: 2;
+        min-width: 500px;
+      }
+
+      .right {
+        flex: 1;
+        min-width: 400px;
+        max-width: 800px;
+      }
+
+      h1 {
+        font-size: 16px;
+        margin: 0 0 6px 0;
+      }
+
+      label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      input[type="text"],
+      input[type="number"],
+      select {
+        width: 100%;
+        padding: 8px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.04);
+        background: var(--glass);
+        color: inherit;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+      }
+
+      button {
+        background: var(--accent);
+        border: none;
+        color: white;
+        padding: 8px 10px;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+
+      .ghost {
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        color: var(--muted);
+      }
+
+      .small {
+        padding: 6px 8px;
+        font-size: 13px;
+      }
+
+      .seg {
+        display: flex;
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: 8px;
+        padding: 4px;
+      }
+
+      .seg button {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: var(--muted);
+        padding: 8px;
+        border-radius: 6px;
+      }
+
+      .seg button.active {
+        background: rgba(255, 255, 255, 0.04);
+        color: white;
+      }
+
+      .panel {
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.02),
+          transparent
+        );
+        padding: 12px;
+        border-radius: 10px;
+      }
+
+      .stat {
+        font-size: 14px;
+      }
+
+      #results {
+        min-height: 80px;
+        background: rgba(0, 0, 0, 0.1);
+        padding: 8px;
+        border-radius: 8px;
+        overflow: auto;
+      }
+
+      .winner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+      }
+
+      .badge {
+        background: rgba(255, 255, 255, 0.03);
+        padding: 4px 8px;
+        border-radius: 8px;
+        color: var(--muted);
+      }
+
+      .ts {
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .chat-holder {
+        height: 640px;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #000;
+      }
+      .chat-toolbar {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        padding:8px 10px;
+        background: rgba(255,255,255,0.02);
+        border-bottom:1px solid rgba(255,255,255,0.02);
+      }
+      .chat-list {
+        padding:8px;
+        height: calc(100% - 42px);
+        overflow: hidden; /* no scrollbar — extra content is clipped */
+        box-sizing: border-box;
+      }
+      .chat-msg{
+        display:flex;
+        gap:8px;
+        align-items:flex-start;
+        padding:6px 4px;
+        border-bottom:1px solid rgba(255, 255, 255, 0.02);
+        font-size:13px;
+        box-sizing: border-box;
+      }
+      .chat-user{
+        font-weight:600;
+        margin-right:6px;
+        width:120px;
+        flex: 0 0 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .chat-text{
+        display:inline-block;
+        max-width: calc(100% - 140px);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .controls-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .footer-note {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      /* modal */
+      .modal {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.6);
+      }
+
+      .modal .card {
+        width: 520px;
+        max-width: 94vw;
+        background: var(--card);
+        padding: 12px;
+        border-radius: 8px;
+      }
+
+      .msg {
+        font-size: 13px;
+        padding: 6px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.02);
+        margin-bottom: 6px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="wrap">
+      <div class="col left">
+        <h1>Twitch Random Picker</h1>
+        <div class="panel">
+          <label>Название канала (id)</label>
+          <div class="row">
+            <input id="channel" type="text" placeholder="channel_name" /><button
+              id="connect"
+              class="small"
+            >
+              Подключиться
+            </button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <label>Хранилище сообщений</label>
+          <div class="row">
+            <button id="clearAll" class="ghost small">Очистить всё</button>
+            <button id="clearOld" class="ghost small">Очистить ≥1 час</button>
+          </div>
+          <div style="margin-top: 8px" class="row">
+            <div class="stat">Сообщений: <b id="msgCount">0</b></div>
+            <div class="stat">Размер: <b id="msgSize">0 B</b></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <label>Время учёта сообщений</label>
+          <div class="row">
+            <input id="timeWindow" type="number" min="0" value="0" />
+            <div class="ts">минут (0 = без ограничений)</div>
+          </div>
+          <label style="margin-top: 8px"
+            >Количество выбираемых пользователей</label
+          >
+          <input id="pickCount" type="number" min="1" value="3" />
+        </div>
+
+        <div class="panel">
+          <label>Фильтр регистрации</label>
+          <div class="seg" id="filterMode">
+            <button data-mode="exact">Точное</button>
+            <button data-mode="contains" class="active">Содержит</button>
+            <button data-mode="regex">Регэксп</button>
+          </div>
+          <div style="margin-top: 8px">
+            <input
+              id="filterText"
+              type="text"
+              placeholder="Текст или регулярное выражение"
+            />
+          </div>
+        </div>
+
+        <div class="panel">
+          <label>Зарегистрированные</label>
+          <div class="row">
+            <div class="stat">Всего: <b id="registeredCount">0</b></div>
+          </div>
+          <div style="margin-top: 8px" class="row">
+            <button id="pick" class="small">Результат</button
+            ><button id="pickFirst" class="small ghost">Первые</button
+            ><button id="showHistory" class="small ghost">История</button>
+          </div>
+          <div id="results" style="margin-top: 8px;"></div>
+        </div>
+      </div>
+
+      <div class="col right">
+        <h1>Чат канала</h1>
+        <div class="chat-holder panel" id="chatArea">
+          <div class="chat-toolbar">
+            <div style="color:var(--muted);font-size:13px">Вид: <span id="chatViewLabel">Сообщения</span></div>
+            <div>
+              <button id="toggleEmbed" class="small ghost">Показать embed</button>
+            </div>
+          </div>
+          <!-- custom compact chat (only user messages) -->
+          <div id="customChat" class="chat-list"></div>
+          <!-- official embed container (kept for fallback / optional) -->
+          <div id="twitch-embed-container" style="height: 100%; display:none;"></div>
+        </div>
+        <div style="margin-top: 12px" class="panel row">
+          <div class="footer-note">
+            Подключение: <span id="status">offline</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="modal">
+      <div class="card">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+          "
+        >
+          <b id="modalTitle">Сообщения</b>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="clearHistory" class="small ghost" style="display:none">Очистить историю</button>
+            <button id="modalClose">Закрыть</button>
+          </div>
+        </div>
+        <div id="modalContent" style="max-height: 60vh; overflow: auto"></div>
+      </div>
+    </div>
+
+    <!-- Подключение tmi.js: основной CDN (jsDelivr) + модульный fallback (skypack/esm.sh) -->
+    <script src="https://cdn.jsdelivr.net/npm/tmi.js/dist/tmi.min.js"></script>
+    <script type="module">
+      // Если по какой-то причине глобальный `tmi` не загружен (CDN блокируется),
+      // пробуем динамически импортировать версию для ESM из Skypack или esm.sh.
+      if (typeof window.tmi === "undefined") {
+        (async () => {
+          try {
+            const m = await import("https://cdn.skypack.dev/tmi.js");
+            window.tmi = m.default || m;
+            console.info("tmi.js loaded from skypack");
+          } catch (e) {
+            try {
+              const m2 = await import("https://esm.sh/tmi.js");
+              window.tmi = m2.default || m2;
+              console.info("tmi.js loaded from esm.sh");
+            } catch (err) {
+              console.warn("Не удалось загрузить tmi.js из CDN fallback:", err);
+            }
+          }
+        })();
+      }
+    </script>
+    <script>
+      // Простая SPA логика
+      const STORAGE_KEY = "rv_messages_v1";
+      const SETTINGS_KEY = "rv_settings_v1";
+      const WINNERS_KEY = "rv_winners_v1";
+      const channelInput = document.getElementById("channel");
+      const connectBtn = document.getElementById("connect");
+      const statusEl = document.getElementById("status");
+      const msgCountEl = document.getElementById("msgCount");
+      const msgSizeEl = document.getElementById("msgSize");
+      const clearAllBtn = document.getElementById("clearAll");
+      const clearOldBtn = document.getElementById("clearOld");
+      const timeWindowInput = document.getElementById("timeWindow");
+      const filterText = document.getElementById("filterText");
+      const filterModeEl = document.getElementById("filterMode");
+      const registeredCountEl = document.getElementById("registeredCount");
+      const resultsEl = document.getElementById("results");
+      const pickFirstBtn = document.getElementById("pickFirst");
+      const pickBtn = document.getElementById("pick");
+      const showHistoryBtn = document.getElementById("showHistory");
+      const clearHistoryBtn = document.getElementById('clearHistory');
+      const pickCountInput = document.getElementById("pickCount");
+      const modal = document.getElementById("modal");
+      const modalContent = document.getElementById("modalContent");
+      const modalTitle = document.getElementById("modalTitle");
+      const modalClose = document.getElementById("modalClose");
+      const customChatEl = document.getElementById('customChat');
+      const toggleEmbedBtn = document.getElementById('toggleEmbed');
+      const chatViewLabel = document.getElementById('chatViewLabel');
+      let embedVisible = false;
+
+      let client = null;
+      let connectedChannel = null;
+      let filterMode = "contains";
+      let settings = { filterTexts: { exact: '', contains: '', regex: '' } };
+      // Background update / throttle state
+      let lastRegisteredUpdate = 0; // timestamp of last actual update
+      let bgInactivityTimer = null; // fires after 1s of inactivity and will call update (initiator 'timer')
+      let throttleTimer = null; // ensures updates not more frequent than THROTTLE_MS
+      const THROTTLE_MS = 100; // 0.1s min interval between actual updates
+      const BG_MS = 1000; // 1s background interval
+
+      // load messages
+      function loadMessages() {
+        try {
+          const s = localStorage.getItem(STORAGE_KEY);
+          return s ? JSON.parse(s) : [];
+        } catch (e) {
+          return [];
+        }
+      }
+      function saveMessages(arr) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+        updateStats();
+      }
+      function pushMessage(msg) {
+        const arr = loadMessages();
+        arr.push(msg);
+        saveMessages(arr);
+      }
+      function updateStats() {
+        const arr = loadMessages();
+        msgCountEl.textContent = arr.length;
+        msgSizeEl.textContent = prettyBytes(
+          new Blob([JSON.stringify(arr)]).size
+        );
+      }
+      function prettyBytes(n) {
+        if (n < 1024) return n + " B";
+        if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+        return (n / (1024 * 1024)).toFixed(2) + " MB";
+      }
+
+      clearAllBtn.addEventListener("click", () => {
+        saveMessages([]);
+        renderRegistered();
+      });
+      clearOldBtn.addEventListener("click", () => {
+        const cutoff = Date.now() - 3600 * 1000;
+        const arr = loadMessages().filter((m) => m.t >= cutoff);
+        saveMessages(arr);
+        renderRegistered();
+      });
+
+      function updateFilterPlaceholder(mode){
+        if(!mode) mode = filterMode;
+        if(mode === 'exact') filterText.placeholder = 'Точное сообщение (ровно как указано)';
+        else if(mode === 'contains') filterText.placeholder = 'Фрагмент текста, который должен содержаться';
+        else if(mode === 'regex') filterText.placeholder = 'Регулярное выражение (JS)';
+      }
+
+      // filter mode UI
+      filterModeEl.querySelectorAll("button").forEach((b) => {
+        b.addEventListener("click", () => {
+          filterModeEl
+            .querySelectorAll("button")
+            .forEach((x) => x.classList.remove("active"));
+          b.classList.add("active");
+          // store current input into settings for previous mode
+          if(settings && settings.filterTexts) settings.filterTexts[filterMode] = filterText.value || '';
+          filterMode = b.dataset.mode;
+          // load filter text for this mode
+          filterText.value = (settings && settings.filterTexts && settings.filterTexts[filterMode]) ? settings.filterTexts[filterMode] : '';
+          // update placeholder
+          updateFilterPlaceholder(filterMode);
+          saveSettings();
+          renderRegistered();
+        });
+      });
+
+      // recompute on changes (updates counts) + save settings
+      [filterText, timeWindowInput, pickCountInput].forEach((el) =>
+        el.addEventListener("input", () => {
+          // save filter per current mode
+          if(el === filterText){ if(!settings.filterTexts) settings.filterTexts = { exact:'', contains:'', regex:'' }; settings.filterTexts[filterMode] = filterText.value || ''; }
+          saveSettings();
+          renderRegistered();
+        })
+      );
+      channelInput.addEventListener("input", () => {
+        saveSettings();
+      });
+
+      // settings persistence
+      function saveSettings() {
+        try {
+          // merge current settings values
+          const obj = Object.assign({}, settings || {});
+          obj.channel = channelInput.value || '';
+          obj.timeWindow = timeWindowInput.value || '0';
+          obj.pickCount = pickCountInput.value || '1';
+          obj.filterMode = filterMode || 'contains';
+          if(!obj.filterTexts) obj.filterTexts = { exact:'', contains:'', regex:'' };
+          // ensure current filterText stored
+          obj.filterTexts[filterMode] = filterText.value || '';
+          settings = obj;
+          localStorage.setItem(SETTINGS_KEY, JSON.stringify(obj));
+        } catch (e) {
+          console.warn("Не удалось сохранить настройки", e);
+        }
+      }
+
+      function loadSettings() {
+        try {
+          const s = localStorage.getItem(SETTINGS_KEY);
+          if (!s) return;
+          const obj = JSON.parse(s) || {};
+          settings = obj;
+          if (obj.channel) channelInput.value = obj.channel;
+          if (obj.timeWindow !== undefined) timeWindowInput.value = obj.timeWindow;
+          if (obj.pickCount !== undefined) pickCountInput.value = obj.pickCount;
+          if (!obj.filterTexts) obj.filterTexts = { exact:'', contains:'', regex:'' };
+          // restore mode
+          if (obj.filterMode) filterMode = obj.filterMode;
+          filterModeEl.querySelectorAll("button").forEach((x) => x.classList.remove("active"));
+          const btn = filterModeEl.querySelector(`button[data-mode='${filterMode}']`);
+          if (btn) btn.classList.add("active");
+          // set filter text for current mode
+          filterText.value = (obj.filterTexts && obj.filterTexts[filterMode]) ? obj.filterTexts[filterMode] : '';
+          // update placeholder
+          updateFilterPlaceholder(filterMode);
+          // try to auto-connect when channel present and tmi becomes available
+          if (channelInput.value && channelInput.value.trim()) {
+            tryAutoConnect(channelInput.value.trim());
+          }
+        } catch (e) {
+          console.warn("Не удалось загрузить настройки", e);
+        }
+      }
+
+      // Try to connect when tmi is ready. Polls until window.tmi exists or timeout.
+      function tryAutoConnect(ch, attempt = 0) {
+        if (!ch) return;
+        if (window.tmi) {
+          try { connectBtn.click(); } catch (e) { console.warn('Auto-connect failed', e); }
+          return;
+        }
+        if (attempt > 30) { console.warn('Auto-connect: tmi not available'); return; }
+        setTimeout(()=> tryAutoConnect(ch, attempt+1), 300);
+      }
+
+      // pick results
+      pickBtn.addEventListener("click", () => {
+        const regs = computeRegistered(false);
+        const n = Math.max(
+          1,
+          Math.min(parseInt(pickCountInput.value || 1), regs.length)
+        );
+        if (regs.length === 0) {
+          showInfoModal('Нет зарегистрированных пользователей');
+          return;
+        }
+        const winners = pickN(regs, n);
+        showWinners(winners);
+      });
+
+      pickFirstBtn.addEventListener("click", () => {
+        const regs = computeRegistered(true);
+        const n = Math.max(
+          1,
+          Math.min(parseInt(pickCountInput.value || 1), regs.length)
+        );
+        if (regs.length === 0) {
+          showInfoModal('Нет зарегистрированных пользователей');
+          return;
+        }
+        const winners = regs.slice(0, n);
+        showWinners(winners);
+      });
+
+      showHistoryBtn.addEventListener("click", () => {
+        showWinnersHistoryModal();
+      });
+
+      // clear history button (in modal header)
+      clearHistoryBtn.addEventListener('click', ()=>{
+        if(!confirm('Очистить историю победителей?')) return;
+        try{ localStorage.removeItem(WINNERS_KEY); modalContent.innerHTML = '<div class="msg">История пуста</div>'; }catch(e){ console.warn(e); }
+      });
+
+      // close modal when clicking outside card
+      modal.addEventListener('click', (e)=>{ if(e.target === modal) modal.style.display = 'none'; });
+
+      function pickN(arr, n) {
+        const copy = arr.slice();
+        const out = [];
+        for (let i = 0; i < n && copy.length; i++) {
+          const idx = Math.floor(Math.random() * copy.length);
+          out.push(copy.splice(idx, 1)[0]);
+        }
+        return out;
+      }
+
+      function showWinners(winners) {
+        resultsEl.innerHTML = "";
+        winners.forEach((w) => {
+          const div = document.createElement("div");
+          div.className = "winner";
+          const left = document.createElement("div");
+          left.innerHTML = `<b>@${escapeHtml(
+            w.user
+          )}</b><div class='ts'>${new Date(
+            w.t
+          ).toLocaleString()} — ${escapeHtml(w.msg)}</div>`;
+          const right = document.createElement("div");
+          right.innerHTML = `<button class='small ghost' data-user='${escapeHtml(
+            w.user
+          )}'>Все сообщения</button>`;
+          div.appendChild(left);
+          div.appendChild(right);
+          resultsEl.appendChild(div);
+          right.querySelector("button").addEventListener("click", () => {
+            openUserModal(w.user);
+          });
+        });
+        // save winners to history (timestamp + snapshot of winners)
+        try {
+          addWinnersToHistory(
+            winners.map((x) => ({ user: x.user, msg: x.msg, t: x.t }))
+          );
+        } catch (e) {
+          console.warn("Не удалось сохранить историю победителей", e);
+        }
+      }
+
+      // Winners history storage (keep last 100 draws)
+      function loadWinnersHistory() {
+        try {
+          const s = localStorage.getItem(WINNERS_KEY);
+          return s ? JSON.parse(s) : [];
+        } catch (e) {
+          return [];
+        }
+      }
+      function saveWinnersHistory(arr) {
+        try {
+          localStorage.setItem(WINNERS_KEY, JSON.stringify(arr));
+        } catch (e) {
+          console.warn("Не удалось сохранить историю", e);
+        }
+      }
+      function addWinnersToHistory(winners) {
+        const hist = loadWinnersHistory();
+        hist.unshift({ t: Date.now(), winners });
+        if (hist.length > 100) hist.length = 100;
+        saveWinnersHistory(hist);
+      }
+
+      // History UI: show modal with last draws
+      function showWinnersHistoryModal() {
+        const hist = loadWinnersHistory();
+        modalTitle.textContent = "История розыгрышей";
+        if (!hist.length) {
+          modalContent.innerHTML = '<div class="msg">История пуста</div>';
+          modal.style.display = "flex";
+          return;
+        }
+        // hint about storage limit
+        const hint = '<div class="msg" style="font-size:12px;color:var(--muted)">Сохранены последние 100 розыгрышей.</div>';
+        modalContent.innerHTML = hint + hist
+          .map((h) => {
+            const when = new Date(h.t).toLocaleString();
+            const list = h.winners
+              .map(
+                (w) =>
+                  `<div style="margin-bottom:6px"><b>@${escapeHtml(
+                    w.user
+                  )}</b> <span class='ts'>${new Date(
+                    w.t
+                  ).toLocaleString()}</span><div>${escapeHtml(
+                    w.msg
+                  )}</div></div>`
+              )
+              .join("");
+            return `<div class='msg'><div style="font-weight:600">${when}</div>${list}</div>`;
+          })
+          .join("");
+        modal.style.display = "flex";
+      }
+
+      // Simple info modal helper
+      function showInfoModal(message, title = 'Информация'){
+        modalTitle.textContent = title;
+        modalContent.innerHTML = `<div class="msg">${escapeHtml(message)}</div>`;
+        // hide clearHistory in info/modal context unless it's history view
+        try{ clearHistoryBtn.style.display = 'none'; }catch(e){}
+        modal.style.display = 'flex';
+      }
+
+      function openUserModal(user) {
+        const all = loadMessages()
+          .filter((m) => m.user.toLowerCase() === user.toLowerCase())
+          .sort((a, b) => b.t - a.t);
+        modalTitle.textContent = "Сообщения @" + user;
+        modalContent.innerHTML = all
+          .map(
+            (m) =>
+              `<div class='msg'><div style="font-weight:600">${escapeHtml(
+                m.user
+              )} <span class='ts'>${new Date(
+                m.t
+              ).toLocaleString()}</span></div><div>${escapeHtml(
+                m.msg
+              )}</div></div>`
+          )
+          .join("");
+        modal.style.display = "flex";
+      }
+      modalClose.addEventListener(
+        "click",
+        () => (modal.style.display = "none")
+      );
+
+      function escapeHtml(s) {
+        return (s + "").replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            }[c])
+        );
+      }
+
+      // Compute deterministic color for nicknames
+      function getNickColor(name) {
+        const palette = [
+          '#e06c75','#e5c07b','#98c379','#56b6c2','#61afef','#c678dd','#d19a66','#7fdbca','#ffb86b','#89ddff'
+        ];
+        let h = 0;
+        for (let i = 0; i < name.length; i++) {
+          h = (h << 5) - h + name.charCodeAt(i);
+          h |= 0;
+        }
+        return palette[Math.abs(h) % palette.length];
+      }
+
+      // Custom compact chat renderer (shows only user messages from local store)
+      // It appends recent messages and then trims oldest messages so that
+      // total content height does not exceed the visible container (no scrollbar).
+      function renderCustomChat(limit = 200) {
+        if (!customChatEl) return;
+        const all = loadMessages();
+        const msgs = all.slice(-limit); // oldest -> newest
+        customChatEl.innerHTML = '';
+        for (let i = 0; i < msgs.length; i++) {
+          const m = msgs[i];
+          const div = document.createElement('div');
+          div.className = 'chat-msg';
+
+          const userSpan = document.createElement('span');
+          userSpan.className = 'chat-user';
+          userSpan.textContent = m.user;
+          userSpan.style.color = getNickColor(m.user || '');
+
+          const textSpan = document.createElement('span');
+          textSpan.className = 'chat-text';
+          textSpan.textContent = m.msg;
+
+          const tsDiv = document.createElement('div');
+          tsDiv.className = 'ts';
+          tsDiv.style.opacity = '0.6';
+          tsDiv.style.fontSize = '11px';
+          tsDiv.style.marginTop = '4px';
+          tsDiv.textContent = new Date(m.t).toLocaleTimeString();
+
+          div.appendChild(userSpan);
+          div.appendChild(textSpan);
+          div.appendChild(tsDiv);
+
+          customChatEl.appendChild(div);
+        }
+
+        // Trim oldest messages while content height exceeds viewport
+        while (
+          customChatEl.firstChild &&
+          customChatEl.scrollHeight > customChatEl.clientHeight
+        ) {
+          customChatEl.removeChild(customChatEl.firstChild);
+        }
+      }
+
+      // Toggle between custom chat and official embed
+      toggleEmbedBtn.addEventListener('click', ()=>{
+        embedVisible = !embedVisible;
+        if(embedVisible){
+          document.getElementById('twitch-embed-container').style.display = '';
+          customChatEl.style.display = 'none';
+          chatViewLabel.textContent = 'Embed';
+          toggleEmbedBtn.textContent = 'Показать сообщения';
+          // ensure embed is setup
+          if(connectedChannel) setupEmbed(connectedChannel);
+        } else {
+          document.getElementById('twitch-embed-container').style.display = 'none';
+          customChatEl.style.display = '';
+          chatViewLabel.textContent = 'Сообщения';
+          toggleEmbedBtn.textContent = 'Показать embed';
+        }
+      });
+
+      function computeRegistered(preferEarliest = false) {
+        const arr = loadMessages();
+        const tw = Math.max(0, parseInt(timeWindowInput.value || 0));
+        const cutoff = tw ? Date.now() - tw * 60 * 1000 : 0;
+        const ft = (filterText.value || "").trim();
+        const mode = filterMode;
+        const byUser = new Map();
+        if (preferEarliest) {
+          // iterate from oldest to newest, keep first occurrence
+          for (let i = 0; i < arr.length; i++) {
+            const m = arr[i];
+            if (cutoff && m.t < cutoff) continue;
+            if (!matchesFilter(m.msg, ft, mode)) continue;
+            const key = m.user.toLowerCase();
+            if (!byUser.has(key))
+              byUser.set(key, { user: m.user, msg: m.msg, t: m.t });
+          }
+        } else {
+          // default: prefer latest (iterate from newest to oldest)
+          for (let i = arr.length - 1; i >= 0; i--) {
+            const m = arr[i];
+            if (cutoff && m.t < cutoff) continue;
+            if (!matchesFilter(m.msg, ft, mode)) continue;
+            const key = m.user.toLowerCase();
+            if (!byUser.has(key))
+              byUser.set(key, { user: m.user, msg: m.msg, t: m.t });
+          }
+        }
+        const list = Array.from(byUser.values());
+        registeredCountEl.textContent = list.length;
+        return list;
+      }
+
+      // Internal: perform the actual update now, mark timestamps and manage timers
+      function performRegisteredUpdate(initiator) {
+        // actual work
+        computeRegistered(false);
+        updateStats();
+        lastRegisteredUpdate = Date.now();
+
+        // any update resets the background inactivity timer to 1s
+        if (bgInactivityTimer) {
+          clearTimeout(bgInactivityTimer);
+          bgInactivityTimer = null;
+        }
+        // schedule the inactivity timer: when it fires, it will request a timer-initiated update
+        bgInactivityTimer = setTimeout(() => {
+          bgInactivityTimer = null;
+          requestRenderRegistered('timer');
+        }, BG_MS);
+
+        // If this update was initiated from non-chat sources, cancel any pending chat throttle timer
+        if (initiator !== 'chat' && throttleTimer) {
+          clearTimeout(throttleTimer);
+          throttleTimer = null;
+        }
+      }
+
+      // Public entry: request an update. initiator can be 'external' (user/chat/etc) or 'timer'
+      function requestRenderRegistered(initiator = 'external') {
+        const now = Date.now();
+        const elapsed = now - lastRegisteredUpdate;
+
+        if (initiator === 'chat') {
+          // Apply throttle only for chat-initiated updates
+          if (elapsed >= THROTTLE_MS || lastRegisteredUpdate === 0) {
+            performRegisteredUpdate(initiator);
+          } else {
+            // schedule a throttled update if not already scheduled
+            if (!throttleTimer) {
+              const delay = THROTTLE_MS - elapsed;
+              throttleTimer = setTimeout(() => {
+                throttleTimer = null;
+                performRegisteredUpdate('chat');
+              }, delay);
+            }
+          }
+        } else {
+          // Non-chat initiators update immediately and cancel any pending chat throttle
+          if (throttleTimer) {
+            clearTimeout(throttleTimer);
+            throttleTimer = null;
+          }
+          performRegisteredUpdate(initiator);
+        }
+      }
+
+      // backward-compatible wrapper used elsewhere in code
+      function renderRegistered() {
+        requestRenderRegistered('external');
+      }
+
+      function matchesFilter(text, pattern, mode) {
+        if (!pattern) return true;
+        try {
+          if (mode === "exact") return text.trim() === pattern;
+          if (mode === "contains")
+            return text.toLowerCase().includes(pattern.toLowerCase());
+          if (mode === "regex") {
+            const re = new RegExp(pattern);
+            return re.test(text);
+          }
+        } catch (e) {
+          return false;
+        }
+      }
+
+      // tmi.js connection
+      connectBtn.addEventListener("click", () => {
+        const ch = (channelInput.value || "").trim();
+        if (!ch) {
+          alert("Введите название канала");
+          return;
+        }
+        if (client) {
+          try {
+            client.disconnect();
+          } catch (e) {}
+          client = null;
+          connectedChannel = null;
+        }
+        statusEl.textContent = "connecting...";
+        client = new tmi.Client({ channels: [ch] });
+        client
+          .connect()
+          .then(() => {
+            statusEl.textContent = "connected";
+            connectedChannel = ch;
+            setupEmbed(ch);
+          })
+          .catch((err) => {
+            statusEl.textContent = "error";
+            alert("Ошибка подключения: " + err);
+          });
+        client.on("message", (channel, tags, message, self) => {
+          // tags.username or tags['display-name']
+          const user = tags["display-name"] || tags.username || "unknown";
+          pushMessage({ user, msg: message, t: Date.now() });
+            // chat-initiated update (subject to chat-only throttle)
+            requestRenderRegistered('chat');
+          // update custom chat view immediately (chat messages only)
+          try { renderCustomChat(); } catch(e){/* ignore */}
+        });
+      });
+
+      // twitch embed (may require hosting on HTTP and parent param)
+      function setupEmbed(ch) {
+        const container = document.getElementById("twitch-embed-container");
+        container.innerHTML = "";
+        // Try to use official Twitch Embed script (preferred) and request dark theme.
+        const parentDomain = location.hostname || "localhost";
+        function fallbackIframe() {
+          const iframe = document.createElement("iframe");
+          iframe.src = `https://www.twitch.tv/embed/${encodeURIComponent(
+            ch
+          )}/chat?parent=${parentDomain}&theme=dark`;
+          iframe.style.width = "100%";
+          iframe.style.height = "100%";
+          iframe.frameBorder = 0;
+          container.appendChild(iframe);
+        }
+
+        try {
+          function createEmbed() {
+            try {
+              // Remove existing children
+              container.innerHTML = "";
+              // If Twitch.Embed is available, use it
+              if (window.Twitch && window.Twitch.Embed) {
+                // Twitch.Embed expects an element id or DOM element; provide the parent container
+                // create a div with an id to host the chat
+                const hostId = "twitch-embed-host";
+                let host = document.getElementById(hostId);
+                if (!host) {
+                  host = document.createElement("div");
+                  host.id = hostId;
+                  host.style.width = "100%";
+                  host.style.height = "100%";
+                  container.appendChild(host);
+                }
+                // Initialize embed
+                try {
+                  new window.Twitch.Embed(host.id, {
+                    width: "100%",
+                    height: "100%",
+                    channel: ch,
+                    parent: [parentDomain],
+                    theme: "dark",
+                    layout: "mobile", // let Twitch choose responsive layout
+                  });
+                } catch (e) {
+                  // If initialization fails, fallback to iframe
+                  container.innerHTML = "";
+                  fallbackIframe();
+                }
+              } else {
+                // If embed script not yet loaded, load it dynamically
+                const s = document.createElement("script");
+                s.src = "https://embed.twitch.tv/embed/v1.js";
+                s.onload = () => {
+                  try {
+                    createEmbed();
+                  } catch (ie) {
+                    container.innerHTML = "";
+                    fallbackIframe();
+                  }
+                };
+                s.onerror = () => {
+                  container.innerHTML = "";
+                  fallbackIframe();
+                };
+                document.body.appendChild(s);
+              }
+            } catch (e) {
+              container.innerHTML = "";
+              fallbackIframe();
+            }
+          }
+
+          createEmbed();
+        } catch (e) {
+          container.innerHTML =
+            '<div style="padding:12px;color:var(--muted)">Не удалось вставить виджет — откройте страницу через HTTP(S) и убедитесь, что домен указан как parent для Twitch embed.</div>';
+        }
+      }
+
+      // load settings and initial render
+      loadSettings();
+      renderRegistered();
+
+      // utility: load any existing storage and update UI periodically
+      updateStats();
+
+      // small helper so user knows about hosting
+      if (location.protocol === "file:") {
+        const note = document.createElement("div");
+        note.className = "footer-note";
+        note.textContent =
+          "Примечание: для корректной работы встроенного чата откройте файл через локальный сервер (например: python -m http.server) и используйте домен в поле parent.";
+        document.querySelector(".right").appendChild(note);
+      }
+    </script>
+  </body>
+</html>
