@@ -72,6 +72,7 @@
       input[type="number"],
       select {
         width: 100%;
+        box-sizing: border-box;
         padding: 8px;
         border-radius: 8px;
         border: 1px solid rgba(255, 255, 255, 0.04);
@@ -173,17 +174,9 @@
         overflow: hidden;
         background: #000;
       }
-      .chat-toolbar {
-        display:flex;
-        align-items:center;
-        justify-content:space-between;
-        padding:8px 10px;
-        background: rgba(255,255,255,0.02);
-        border-bottom:1px solid rgba(255,255,255,0.02);
-      }
       .chat-list {
-        padding:8px;
-        height: calc(100% - 42px);
+        padding:0px;
+        height: calc(100% + 15px);
         overflow: hidden; /* no scrollbar — extra content is clipped */
         box-sizing: border-box;
       }
@@ -316,10 +309,13 @@
           <div class="row">
             <div class="stat">Всего: <b id="registeredCount">0</b></div>
           </div>
-          <div style="margin-top: 8px" class="row">
-            <button id="pick" class="small">Результат</button
-            ><button id="pickFirst" class="small ghost">Первые</button
-            ><button id="showHistory" class="small ghost">История</button>
+          <div style="margin-top: 8px" class="row" style="justify-content:space-between;align-items:center;">
+            <button id="pick" class="small">Результат</button>
+            <button id="pickFirst" class="small ghost">Первые</button>
+            <div style="flex:1"></div>
+            <button id="clearWinners" class="small ghost">Очистить</button>
+            <button id="exportWinners" class="small ghost">Экспорт</button>
+            <button id="showHistory" class="small ghost">История</button>
           </div>
           <div id="results" style="margin-top: 8px;"></div>
         </div>
@@ -328,16 +324,9 @@
       <div class="col right">
         <h1>Чат канала</h1>
         <div class="chat-holder panel" id="chatArea">
-          <div class="chat-toolbar">
-            <div style="color:var(--muted);font-size:13px">Вид: <span id="chatViewLabel">Сообщения</span></div>
-            <div>
-              <button id="toggleEmbed" class="small ghost">Показать embed</button>
-            </div>
-          </div>
           <!-- custom compact chat (only user messages) -->
           <div id="customChat" class="chat-list"></div>
-          <!-- official embed container (kept for fallback / optional) -->
-          <div id="twitch-embed-container" style="height: 100%; display:none;"></div>
+          <!-- embed removed -->
         </div>
         <div style="margin-top: 12px" class="panel row">
           <div class="footer-note">
@@ -390,6 +379,8 @@
         })();
       }
     </script>
+    <!-- SheetJS for XLSX export -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
     <script>
       // Простая SPA логика
       const STORAGE_KEY = "rv_messages_v1";
@@ -411,15 +402,14 @@
       const pickBtn = document.getElementById("pick");
       const showHistoryBtn = document.getElementById("showHistory");
       const clearHistoryBtn = document.getElementById('clearHistory');
+      const exportWinnersBtn = document.getElementById('exportWinners');
+      const clearWinnersBtn = document.getElementById('clearWinners');
       const pickCountInput = document.getElementById("pickCount");
       const modal = document.getElementById("modal");
       const modalContent = document.getElementById("modalContent");
       const modalTitle = document.getElementById("modalTitle");
       const modalClose = document.getElementById("modalClose");
       const customChatEl = document.getElementById('customChat');
-      const toggleEmbedBtn = document.getElementById('toggleEmbed');
-      const chatViewLabel = document.getElementById('chatViewLabel');
-      let embedVisible = false;
 
       let client = null;
       let connectedChannel = null;
@@ -604,6 +594,99 @@
         showWinnersHistoryModal();
       });
 
+      // Read currently displayed winners from DOM
+      function getDisplayedWinners() {
+        const out = [];
+        if (!resultsEl) return out;
+        const nodes = resultsEl.querySelectorAll('.winner');
+        nodes.forEach((n) => {
+          const left = n.querySelector('div');
+          const b = left ? left.querySelector('b') : null;
+          const user = b ? b.textContent.replace(/^@/, '') : '';
+          const tsEl = left ? left.querySelector('.ts') : null;
+          let tText = '';
+          let msg = '';
+          if (tsEl) {
+            const parts = tsEl.textContent.split(' — ');
+            tText = parts[0] ? parts[0].trim() : '';
+            msg = parts[1] ? parts.slice(1).join(' — ').trim() : '';
+          }
+          out.push({ user, t: tText, msg });
+        });
+        return out;
+      }
+
+      // Clear winners area
+      if (clearWinnersBtn) {
+        clearWinnersBtn.addEventListener('click', () => {
+          resultsEl.innerHTML = '';
+        });
+      }
+
+      // Export button: open modal with export options
+      if (exportWinnersBtn) {
+        exportWinnersBtn.addEventListener('click', () => {
+          const winners = getDisplayedWinners();
+          if (!winners.length) {
+            showInfoModal('Нет победителей для экспорта');
+            return;
+          }
+          modalTitle.textContent = 'Экспорт победителей';
+          try { clearHistoryBtn.style.display = 'none'; } catch (e) {}
+          modalContent.innerHTML = `
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div class="msg">Победители: <b>${winners.length}</b></div>
+              <div style="display:flex;gap:8px">
+                <button id="doExportXlsx" class="small">Экспорт в xlsx</button>
+                <button id="doCopyLogins" class="small ghost">Копировать логины</button>
+              </div>
+            </div>`;
+          modal.style.display = 'flex';
+          // attach handlers
+          setTimeout(()=>{
+            const btnX = document.getElementById('doExportXlsx');
+            const btnC = document.getElementById('doCopyLogins');
+            if(btnX) btnX.addEventListener('click', ()=>{
+              exportDisplayedToXlsx(winners);
+            });
+            if(btnC) btnC.addEventListener('click', ()=>{
+              copyDisplayedLogins(winners);
+            });
+          },0);
+        });
+      }
+
+      function exportDisplayedToXlsx(winners){
+        const rows = winners.map((w) => ({ User: w.user, Timestamp: w.t, Message: w.msg }));
+        try{
+          const ws = XLSX.utils.json_to_sheet(rows);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, 'Winners');
+          const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+          const blob = new Blob([wbout], { type: 'application/octet-stream' });
+          const filename = `winners_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.xlsx`;
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+        }catch(e){ console.warn('Export failed', e); showInfoModal('Ошибка при экспорте: ' + (e && e.message ? e.message : e)); }
+      }
+
+      function copyDisplayedLogins(winners){
+        const logins = winners.map(w => (w.user || '').replace(/^@/,'')).join(' ');
+        if(!logins){ showInfoModal('Нет логинов для копирования'); return; }
+        if(navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(logins).then(()=> showInfoModal('Логины скопированы в буфер обмена'))
+            .catch(()=> fallbackCopy(logins));
+        } else {
+          fallbackCopy(logins);
+        }
+      }
+
+      function fallbackCopy(text){
+        try{
+          const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); showInfoModal('Логины скопированы в буфер обмена');
+        }catch(e){ showInfoModal('Не удалось скопировать логины'); }
+      }
+
       // clear history button (in modal header)
       clearHistoryBtn.addEventListener('click', ()=>{
         if(!confirm('Очистить историю победителей?')) return;
@@ -682,6 +765,8 @@
       function showWinnersHistoryModal() {
         const hist = loadWinnersHistory();
         modalTitle.textContent = "История розыгрышей";
+        // Показать кнопку очистки истории только для истории
+        try { clearHistoryBtn.style.display = ''; } catch(e){}
         if (!hist.length) {
           modalContent.innerHTML = '<div class="msg">История пуста</div>';
           modal.style.display = "flex";
@@ -690,7 +775,7 @@
         // hint about storage limit
         const hint = '<div class="msg" style="font-size:12px;color:var(--muted)">Сохранены последние 100 розыгрышей.</div>';
         modalContent.innerHTML = hint + hist
-          .map((h) => {
+          .map((h, idx) => {
             const when = new Date(h.t).toLocaleString();
             const list = h.winners
               .map(
@@ -704,9 +789,45 @@
                   )}</div></div>`
               )
               .join("");
-            return `<div class='msg'><div style="font-weight:600">${when}</div>${list}</div>`;
+            // Кнопка восстановить справа в заголовке блока
+            return `<div class='msg' style="position:relative;"><div style="font-weight:600;display:flex;align-items:center;justify-content:space-between;"><span>${when}</span><button class='small ghost restore-history-btn' data-idx='${idx}' style="margin-left:8px;">Восстановить</button></div>${list}</div>`;
           })
           .join("");
+        // Навесить обработчики на кнопки восстановления
+        setTimeout(()=>{
+          const btns = modalContent.querySelectorAll('.restore-history-btn');
+          btns.forEach(btn=>{
+            btn.addEventListener('click', function(){
+              const idx = parseInt(this.getAttribute('data-idx'));
+              if (!isNaN(idx) && hist[idx] && hist[idx].winners) {
+                // Заменить область победителей
+                resultsEl.innerHTML = '';
+                hist[idx].winners.forEach((w) => {
+                  const div = document.createElement("div");
+                  div.className = "winner";
+                  const left = document.createElement("div");
+                  left.innerHTML = `<b>@${escapeHtml(
+                    w.user
+                  )}</b><div class='ts'>${new Date(
+                    w.t
+                  ).toLocaleString()} — ${escapeHtml(w.msg)}</div>`;
+                  const right = document.createElement("div");
+                  right.innerHTML = `<button class='small ghost' data-user='${escapeHtml(
+                    w.user
+                  )}'>Все сообщения</button>`;
+                  div.appendChild(left);
+                  div.appendChild(right);
+                  resultsEl.appendChild(div);
+                  right.querySelector("button").addEventListener("click", () => {
+                    openUserModal(w.user);
+                  });
+                });
+                // Закрыть модальное окно
+                modal.style.display = 'none';
+              }
+            });
+          });
+        }, 0);
         modal.style.display = "flex";
       }
 
@@ -724,6 +845,8 @@
           .filter((m) => m.user.toLowerCase() === user.toLowerCase())
           .sort((a, b) => b.t - a.t);
         modalTitle.textContent = "Сообщения @" + user;
+        // Скрыть кнопку очистки истории для модального окна сообщений пользователя
+        try { clearHistoryBtn.style.display = 'none'; } catch(e){}
         modalContent.innerHTML = all
           .map(
             (m) =>
@@ -814,24 +937,6 @@
           customChatEl.removeChild(customChatEl.firstChild);
         }
       }
-
-      // Toggle between custom chat and official embed
-      toggleEmbedBtn.addEventListener('click', ()=>{
-        embedVisible = !embedVisible;
-        if(embedVisible){
-          document.getElementById('twitch-embed-container').style.display = '';
-          customChatEl.style.display = 'none';
-          chatViewLabel.textContent = 'Embed';
-          toggleEmbedBtn.textContent = 'Показать сообщения';
-          // ensure embed is setup
-          if(connectedChannel) setupEmbed(connectedChannel);
-        } else {
-          document.getElementById('twitch-embed-container').style.display = 'none';
-          customChatEl.style.display = '';
-          chatViewLabel.textContent = 'Сообщения';
-          toggleEmbedBtn.textContent = 'Показать embed';
-        }
-      });
 
       function computeRegistered(preferEarliest = false) {
         const arr = loadMessages();
@@ -961,7 +1066,6 @@
           .then(() => {
             statusEl.textContent = "connected";
             connectedChannel = ch;
-            setupEmbed(ch);
           })
           .catch((err) => {
             statusEl.textContent = "error";
@@ -977,87 +1081,6 @@
           try { renderCustomChat(); } catch(e){/* ignore */}
         });
       });
-
-      // twitch embed (may require hosting on HTTP and parent param)
-      function setupEmbed(ch) {
-        const container = document.getElementById("twitch-embed-container");
-        container.innerHTML = "";
-        // Try to use official Twitch Embed script (preferred) and request dark theme.
-        const parentDomain = location.hostname || "localhost";
-        function fallbackIframe() {
-          const iframe = document.createElement("iframe");
-          iframe.src = `https://www.twitch.tv/embed/${encodeURIComponent(
-            ch
-          )}/chat?parent=${parentDomain}&theme=dark`;
-          iframe.style.width = "100%";
-          iframe.style.height = "100%";
-          iframe.frameBorder = 0;
-          container.appendChild(iframe);
-        }
-
-        try {
-          function createEmbed() {
-            try {
-              // Remove existing children
-              container.innerHTML = "";
-              // If Twitch.Embed is available, use it
-              if (window.Twitch && window.Twitch.Embed) {
-                // Twitch.Embed expects an element id or DOM element; provide the parent container
-                // create a div with an id to host the chat
-                const hostId = "twitch-embed-host";
-                let host = document.getElementById(hostId);
-                if (!host) {
-                  host = document.createElement("div");
-                  host.id = hostId;
-                  host.style.width = "100%";
-                  host.style.height = "100%";
-                  container.appendChild(host);
-                }
-                // Initialize embed
-                try {
-                  new window.Twitch.Embed(host.id, {
-                    width: "100%",
-                    height: "100%",
-                    channel: ch,
-                    parent: [parentDomain],
-                    theme: "dark",
-                    layout: "mobile", // let Twitch choose responsive layout
-                  });
-                } catch (e) {
-                  // If initialization fails, fallback to iframe
-                  container.innerHTML = "";
-                  fallbackIframe();
-                }
-              } else {
-                // If embed script not yet loaded, load it dynamically
-                const s = document.createElement("script");
-                s.src = "https://embed.twitch.tv/embed/v1.js";
-                s.onload = () => {
-                  try {
-                    createEmbed();
-                  } catch (ie) {
-                    container.innerHTML = "";
-                    fallbackIframe();
-                  }
-                };
-                s.onerror = () => {
-                  container.innerHTML = "";
-                  fallbackIframe();
-                };
-                document.body.appendChild(s);
-              }
-            } catch (e) {
-              container.innerHTML = "";
-              fallbackIframe();
-            }
-          }
-
-          createEmbed();
-        } catch (e) {
-          container.innerHTML =
-            '<div style="padding:12px;color:var(--muted)">Не удалось вставить виджет — откройте страницу через HTTP(S) и убедитесь, что домен указан как parent для Twitch embed.</div>';
-        }
-      }
 
       // load settings and initial render
       loadSettings();
